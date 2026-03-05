@@ -2,7 +2,6 @@
     "name": "frappe-gantt",
     "version": "1.2.2",
     "description": "A simple, modern, interactive gantt library for the web",
-    "type": "module",
     "main": "src/index.js",
     "style": "src/styles/gantt.css",
     "scripts": {
