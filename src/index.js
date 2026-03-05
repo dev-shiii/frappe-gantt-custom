@@ -1312,35 +1312,53 @@ export default class Gantt {
             if (!action_in_progress()) return;
             const dx = (e.offsetX || e.layerX) - x_on_start;
 
-            bars.forEach((bar) => {
-                const $bar = bar.$bar;
-                $bar.finaldx = this.get_snap_position(dx, $bar.ox);
-                this.hide_popup();
-                if (is_resizing_left) {
-                    if (parent_bar_id === bar.task.id) {
-                        bar.update_bar_position({
-                            x: $bar.ox + $bar.finaldx,
-                            width: $bar.owidth - $bar.finaldx,
-                        });
-                    } else {
-                        bar.update_bar_position({
-                            x: $bar.ox + $bar.finaldx,
-                        });
-                    }
-                } else if (is_resizing_right) {
-                    if (parent_bar_id === bar.task.id) {
-                        bar.update_bar_position({
-                            width: $bar.owidth + $bar.finaldx,
-                        });
-                    }
-                } else if (
-                    is_dragging &&
-                    !this.options.readonly &&
-                    !this.options.readonly_dates
-                ) {
-                    bar.update_bar_position({ x: $bar.ox + $bar.finaldx });
+            this.hide_popup();
+
+            const main_bar = bars[0];
+            main_bar.$bar.finaldx = this.get_snap_position(dx, main_bar.$bar.ox);
+
+            if (is_resizing_left) {
+                if (parent_bar_id === main_bar.task.id) {
+                    main_bar.update_bar_position({
+                        x: main_bar.$bar.ox + main_bar.$bar.finaldx,
+                        width: main_bar.$bar.owidth - main_bar.$bar.finaldx,
+                    });
                 }
-            });
+            } else if (is_resizing_right) {
+                if (parent_bar_id === main_bar.task.id) {
+                    main_bar.update_bar_position({
+                        width: main_bar.$bar.owidth + main_bar.$bar.finaldx,
+                    });
+                }
+            } else if (is_dragging && !this.options.readonly && !this.options.readonly_dates) {
+                main_bar.update_bar_position({ x: main_bar.$bar.ox + main_bar.$bar.finaldx });
+            }
+
+            if (this.options.move_dependencies && !this.options.readonly && !this.options.readonly_dates) {
+                for (let i = 1; i < bars.length; i++) {
+                    let bar = bars[i];
+                    let task = bar.task;
+
+                    if (is_resizing_left) continue;
+
+                    let max_parent_end_x = 0;
+
+                    task.dependencies.forEach(dep_id => {
+                        let parent_bar = this.get_bar(dep_id);
+                        if (parent_bar) {
+                            let parent_end_x = parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
+                            if (parent_end_x > max_parent_end_x) {
+                                max_parent_end_x = parent_end_x;
+                            }
+                        }
+                    });
+
+                    let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
+                    
+                    bar.$bar.finaldx = new_x - bar.$bar.ox;
+                    bar.update_bar_position({ x: new_x });
+                }
+            }
         });
 
         document.addEventListener('mouseup', () => {
@@ -1452,19 +1470,20 @@ export default class Gantt {
     get_all_dependent_tasks(task_id) {
         let out = [];
         let to_process = [task_id];
-        while (to_process.length) {
+        
+        while (to_process.length > 0) {
             const deps = to_process.reduce((acc, curr) => {
-                acc = acc.concat(this.dependency_map[curr]);
-                return acc;
+                const currentDeps = this.dependency_map[curr] || [];
+                return acc.concat(currentDeps);
             }, []);
 
-            out = out.concat(deps);
-            to_process = deps.filter(
-                (d) => !to_process.includes(d) && !out.includes(d),
-            );
+            const new_deps = deps.filter((d) => d && !out.includes(d) && !to_process.includes(d));
+            
+            out = out.concat(new_deps);
+            to_process = new_deps;
         }
 
-        return out.filter(Boolean);
+        return out;
     }
 
     get_snap_position(dx, ox) {
