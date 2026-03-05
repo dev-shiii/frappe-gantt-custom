@@ -21,11 +21,8 @@
         "README.md"
     ],
     "exports": {
-        ".": {
-            "require": "./dist/frappe-gantt.umd.js",
-            "import": "./dist/frappe-gantt.es.js",
-            "style": "./dist/frappe-gantt.css"
-        }
+        ".": "./src/index.js",
+        "./src/*": "./src/*"
     },
     "keywords": [
         "gantt",
