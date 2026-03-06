@@ -1352,9 +1352,20 @@ export default class Gantt {
                             }
                         }
                     });
-
                     let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
-                    
+                    let inside_holiday = true;
+                    while (inside_holiday) {
+                        let hit_holiday = this.config.ignored_positions.find(
+                            (holiday_x) => Math.abs(holiday_x - new_x) < 1
+                        );
+                        
+                        if (hit_holiday !== undefined) {
+                            new_x += this.config.column_width;
+                        } else {
+                            inside_holiday = false;
+                        }
+                    }
+
                     bar.$bar.finaldx = new_x - bar.$bar.ox;
                     bar.update_bar_position({ x: new_x });
                 }
