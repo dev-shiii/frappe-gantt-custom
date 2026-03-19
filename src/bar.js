@@ -384,6 +384,7 @@ export default class Bar {
         });
 
         $.on(this.group, 'click', () => {
+            if (this.action_completed) return;
             this.gantt.trigger_event('click', [this.task]);
         });
 
