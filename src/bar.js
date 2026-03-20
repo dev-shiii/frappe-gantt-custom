@@ -524,25 +524,67 @@ export default class Bar {
         this.action_completed = true;
         setTimeout(() => (this.action_completed = false), 1000);
     }
+        snap_to_working_day(date, direction = 1) {
+        const isIgnored = (d) => {
+            const sameDayIgnored = this.gantt.config.ignored_dates.find(
+                (k) => k.getTime() === d.getTime()
+            );
+            return (
+                sameDayIgnored ||
+                (this.gantt.config.ignored_function &&
+                    this.gantt.config.ignored_function(d))
+            );
+        };
 
-    compute_start_end_date() {
+        let d = new Date(date);
+        // normalize to midnight to avoid time drifts
+        d.setHours(0, 0, 0, 0);
+
+        // safety: limit loop to avoid infinite spin if config is wrong
+        let guard = 0;
+        while (isIgnored(d) && guard < 366) {
+            d.setDate(d.getDate() + direction); // +1 forward, -1 backward
+            guard++;
+        }
+        return d;
+    }
+
+
+        compute_start_end_date() {
         const bar = this.$bar;
+
+        // convert X position to units
         const x_in_units = bar.getX() / this.gantt.config.column_width;
         let new_start_date = date_utils.add(
             this.gantt.gantt_start,
             x_in_units * this.gantt.config.step,
-            this.gantt.config.unit,
+            this.gantt.config.unit
         );
 
-        const width_in_units = bar.getWidth() / this.gantt.config.column_width;
-        const new_end_date = date_utils.add(
+        // decide snap direction based on drag: if start moved later, go forward, else backward
+        let direction = 1;
+        if (this.task._start && new_start_date < this.task._start) {
+            direction = -1;
+        }
+
+        // snap start to a working day
+        new_start_date = this.snap_to_working_day(new_start_date, direction);
+
+        // keep the same visual width (in units) but base it from snapped start
+        const width_in_units =
+            bar.getWidth() / this.gantt.config.column_width;
+        let new_end_date = date_utils.add(
             new_start_date,
             width_in_units * this.gantt.config.step,
-            this.gantt.config.unit,
+            this.gantt.config.unit
         );
+
+        // snap end forward if it lands on an ignored day
+        new_end_date = this.snap_to_working_day(new_end_date, 1);
 
         return { new_start_date, new_end_date };
     }
+
 
     compute_progress() {
         this.progress_width = this.$bar_progress.getWidth();
