@@ -1330,9 +1330,29 @@ export default class Gantt {
                         width: main_bar.$bar.owidth + main_bar.$bar.finaldx,
                     });
                 }
-            } else if (is_dragging && !this.options.readonly && !this.options.readonly_dates) {
-                main_bar.update_bar_position({ x: main_bar.$bar.ox + main_bar.$bar.finaldx });
+            } else if (is_dragging) {
+            let x = $bar.ox + dx;
+
+            // 1) snap to grid
+            x = this.get_snap_position(x);
+
+            // 2) skip ignored (holidays / weekends)
+            let ignored_regions = this.get_ignored_region(x);
+            while (ignored_regions.length) {
+                x += this.config.column_width * (this.options.rtl ? -1 : 1);
+                ignored_regions = this.get_ignored_region(x);
             }
+
+            // 3) apply new position
+            if (this.options.maintain_dragging_duration) {
+                bar.update_bar_position({ x });
+            } else {
+                bar.update_bar_position({
+                    x: is_resizing_left ? x : $bar.ox,
+                    width: $bar.owidth + dx * (this.options.rtl ? -1 : 1),
+                });
+            }
+        }
 
             if (this.options.move_dependencies && !this.options.readonly && !this.options.readonly_dates) {
                 for (let i = 1; i < bars.length; i++) {
