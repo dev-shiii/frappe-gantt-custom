@@ -1308,89 +1308,108 @@ export default class Gantt {
             }
         });
 
-        $.on(this.$svg, 'mousemove', (e) => {
-            if (!action_in_progress()) return;
-            const dx = (e.offsetX || e.layerX) - x_on_start;
+       $.on(this.$svg, 'mousemove', (e) => {
+    if (!action_in_progress()) return;
+    const dx = (e.offsetX || e.layerX) - x_on_start;
 
-            this.hide_popup();
+    this.hide_popup();
 
-            const main_bar = bars[0];
-            main_bar.$bar.finaldx = this.get_snap_position(dx, main_bar.$bar.ox);
+    const main_bar = bars[0];
 
-            if (is_resizing_left) {
-                if (parent_bar_id === main_bar.task.id) {
-                    main_bar.update_bar_position({
-                        x: main_bar.$bar.ox + main_bar.$bar.finaldx,
-                        width: main_bar.$bar.owidth - main_bar.$bar.finaldx,
-                    });
-                }
-            } else if (is_resizing_right) {
-                if (parent_bar_id === main_bar.task.id) {
-                    main_bar.update_bar_position({
-                        width: main_bar.$bar.owidth + main_bar.$bar.finaldx,
-                    });
-                }
-            } else if (is_dragging) {
-            let x = $bar.ox + dx;
+    // original snap logic
+    main_bar.$bar.finaldx = this.get_snap_position(dx, main_bar.$bar.ox);
 
-            // 1) snap to grid
-            x = this.get_snap_position(x);
+    if (is_resizing_left) {
+        if (parent_bar_id === main_bar.task.id) {
+            main_bar.update_bar_position({
+                x: main_bar.$bar.ox + main_bar.$bar.finaldx,
+                width: main_bar.$bar.owidth - main_bar.$bar.finaldx,
+            });
+        }
+    } else if (is_resizing_right) {
+        if (parent_bar_id === main_bar.task.id) {
+            main_bar.update_bar_position({
+                width: main_bar.$bar.owidth + main_bar.$bar.finaldx,
+            });
+        }
+    } else if (is_dragging) {
+        // --- NEW DRAG LOGIC (gap‑aware) ---
 
-            // 2) skip ignored (holidays / weekends)
-            let ignored_regions = this.get_ignored_region(x);
-            while (ignored_regions.length) {
-                x += this.config.column_width * (this.options.rtl ? -1 : 1);
-                ignored_regions = this.get_ignored_region(x);
-            }
+        // 1) compute candidate x from original position + dx
+        let x = main_bar.$bar.ox + dx;
 
-            // 3) apply new position
-            if (this.options.maintain_dragging_duration) {
-                bar.update_bar_position({ x });
-            } else {
-                bar.update_bar_position({
-                    x: is_resizing_left ? x : $bar.ox,
-                    width: $bar.owidth + dx * (this.options.rtl ? -1 : 1),
-                });
-            }
+        // 2) snap to grid (same as before)
+        x = this.get_snap_position(x);
+
+        // 3) skip ignored columns (holidays / weekends)
+        let ignored_regions = this.get_ignored_region(x);
+        while (ignored_regions.length) {
+            x += this.config.column_width * (this.options.rtl ? -1 : 1);
+            ignored_regions = this.get_ignored_region(x);
         }
 
-            if (this.options.move_dependencies && !this.options.readonly && !this.options.readonly_dates) {
-                for (let i = 1; i < bars.length; i++) {
-                    let bar = bars[i];
-                    let task = bar.task;
+        // 4) store final dx (for dependents)
+        main_bar.$bar.finaldx = x - main_bar.$bar.ox;
 
-                    if (is_resizing_left) continue;
+        // 5) apply new position
+        if (this.options.maintain_dragging_duration) {
+            main_bar.update_bar_position({ x });
+        } else {
+            main_bar.update_bar_position({
+                x: is_resizing_left ? x : main_bar.$bar.ox,
+                width:
+                    main_bar.$bar.owidth +
+                    dx * (this.options.rtl ? -1 : 1),
+            });
+        }
+    }
 
-                    let max_parent_end_x = 0;
+    // --- existing cascade for dependent bars (unchanged) ---
+    if (
+        this.options.move_dependencies &&
+        !this.options.readonly &&
+        !this.options.readonly_dates
+    ) {
+        for (let i = 1; i < bars.length; i++) {
+            let bar = bars[i];
+            let task = bar.task;
 
-                    task.dependencies.forEach(dep_id => {
-                        let parent_bar = this.get_bar(dep_id);
-                        if (parent_bar) {
-                            let parent_end_x = parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
-                            if (parent_end_x > max_parent_end_x) {
-                                max_parent_end_x = parent_end_x;
-                            }
-                        }
-                    });
-                    let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
-                    let inside_holiday = true;
-                    while (inside_holiday) {
-                        let hit_holiday = this.config.ignored_positions.find(
-                            (holiday_x) => Math.abs(holiday_x - new_x) < 1
-                        );
-                        
-                        if (hit_holiday !== undefined) {
-                            new_x += this.config.column_width;
-                        } else {
-                            inside_holiday = false;
-                        }
+            if (is_resizing_left) continue;
+
+            let max_parent_end_x = 0;
+
+            task.dependencies.forEach((dep_id) => {
+                let parent_bar = this.get_bar(dep_id);
+                if (parent_bar) {
+                    let parent_end_x =
+                        parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
+                    if (parent_end_x > max_parent_end_x) {
+                        max_parent_end_x = parent_end_x;
                     }
+                }
+            });
 
-                    bar.$bar.finaldx = new_x - bar.$bar.ox;
-                    bar.update_bar_position({ x: new_x });
+            let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
+
+            let inside_holiday = true;
+            while (inside_holiday) {
+                let hit_holiday = this.config.ignored_positions.find(
+                    (holiday_x) => Math.abs(holiday_x - new_x) < 1
+                );
+
+                if (hit_holiday !== undefined) {
+                    new_x += this.config.column_width;
+                } else {
+                    inside_holiday = false;
                 }
             }
-        });
+
+            bar.$bar.finaldx = new_x - bar.$bar.ox;
+            bar.update_bar_position({ x: new_x });
+        }
+    }
+});
+
 
         document.addEventListener('mouseup', () => {
             is_dragging = false;
