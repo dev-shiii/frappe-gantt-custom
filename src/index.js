@@ -740,6 +740,13 @@ export default class Gantt {
                 style="stroke:grey; stroke-width:0.3" />
         </pattern>`;
 
+        this.layers.grid.innerHTML += `<pattern id="holidayHatch" patternUnits="userSpaceOnUse" width="4" height="4">
+          <path d="M-1,1 l2,-2
+                   M0,4 l4,-4
+                   M3,5 l2,-2"
+                style="stroke:#ff9999; stroke-width:0.5" />
+        </pattern>`;
+
         for (
             let d = new Date(this.gantt_start);
             d <= this.gantt_end;
@@ -760,6 +767,16 @@ export default class Gantt {
                 ) / this.config.step;
 
             this.config.ignored_positions.push(diff * this.config.column_width);
+
+            let fillStyle = 'fill: url(#diagonalHatch);';
+            let customClass = 'ignored-bar';
+
+            if (this.options.get_ignored_type) {
+                if (this.options.get_ignored_type(d) === 'holiday') {
+                    fillStyle = 'fill: url(#holidayHatch);';
+                    customClass = 'ignored-bar holiday-bar';
+                }
+            }
             createSVG('rect', {
                 x: diff * this.config.column_width,
                 y: this.config.header_height,
