@@ -1,4 +1,4 @@
-const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second", C = "millisecond", d = {
+const T = "year", L = "month", Y = "day", A = "hour", S = "minute", E = "second", W = "millisecond", d = {
   parse_duration(n) {
     const e = /([0-9]+)(y|m|d|h|min|s|ms)/gm.exec(n);
     if (e !== null) {
@@ -32,7 +32,7 @@ const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second"
   to_string(n, t = !1) {
     if (!(n instanceof Date))
       throw new TypeError("Invalid argument type");
-    const e = this.get_date_values(n).map((r, a) => (a === 1 && (r = r + 1), a === 6 ? v(r + "", 3, "0") : v(r + "", 2, "0"))), i = `${e[0]}-${e[1]}-${e[2]}`, s = `${e[3]}:${e[4]}:${e[5]}.${e[6]}`;
+    const e = this.get_date_values(n).map((r, a) => (a === 1 && (r = r + 1), a === 6 ? M(r + "", 3, "0") : M(r + "", 2, "0"))), i = `${e[0]}-${e[1]}-${e[2]}`, s = `${e[3]}:${e[4]}:${e[5]}.${e[6]}`;
     return i + (t ? " " + s : "");
   },
   format(n, t = "YYYY-MM-DD HH:mm:ss.SSS", e = "en") {
@@ -40,9 +40,9 @@ const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second"
       month: "long"
     }), s = new Intl.DateTimeFormat(e, {
       month: "short"
-    }), r = i.format(n), a = r.charAt(0).toUpperCase() + r.slice(1), o = this.get_date_values(n).map((_) => v(_, 2, 0)), h = {
+    }), r = i.format(n), a = r.charAt(0).toUpperCase() + r.slice(1), o = this.get_date_values(n).map((_) => M(_, 2, 0)), h = {
       YYYY: o[0],
-      MM: v(+o[1] + 1, 2, 0),
+      MM: M(+o[1] + 1, 2, 0),
       DD: o[2],
       HH: o[3],
       mm: o[4],
@@ -86,25 +86,25 @@ const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second"
   add(n, t, e) {
     t = parseInt(t, 10);
     const i = [
-      n.getFullYear() + (e === D ? t : 0),
-      n.getMonth() + (e === T ? t : 0),
-      n.getDate() + (e === L ? t : 0),
-      n.getHours() + (e === Y ? t : 0),
-      n.getMinutes() + (e === A ? t : 0),
+      n.getFullYear() + (e === T ? t : 0),
+      n.getMonth() + (e === L ? t : 0),
+      n.getDate() + (e === Y ? t : 0),
+      n.getHours() + (e === A ? t : 0),
+      n.getMinutes() + (e === S ? t : 0),
       n.getSeconds() + (e === E ? t : 0),
-      n.getMilliseconds() + (e === C ? t : 0)
+      n.getMilliseconds() + (e === W ? t : 0)
     ];
     return new Date(...i);
   },
   start_of(n, t) {
     const e = {
-      [D]: 6,
-      [T]: 5,
-      [L]: 4,
-      [Y]: 3,
-      [A]: 2,
+      [T]: 6,
+      [L]: 5,
+      [Y]: 4,
+      [A]: 3,
+      [S]: 2,
       [E]: 1,
-      [C]: 0
+      [W]: 0
     };
     function i(r) {
       const a = e[t];
@@ -112,11 +112,11 @@ const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second"
     }
     const s = [
       n.getFullYear(),
-      i(D) ? 0 : n.getMonth(),
-      i(T) ? 1 : n.getDate(),
-      i(L) ? 0 : n.getHours(),
-      i(Y) ? 0 : n.getMinutes(),
-      i(A) ? 0 : n.getSeconds(),
+      i(T) ? 0 : n.getMonth(),
+      i(L) ? 1 : n.getDate(),
+      i(Y) ? 0 : n.getHours(),
+      i(A) ? 0 : n.getMinutes(),
+      i(S) ? 0 : n.getSeconds(),
       i(E) ? 0 : n.getMilliseconds()
     ];
     return new Date(...s);
@@ -169,7 +169,7 @@ const D = "year", T = "month", L = "day", Y = "hour", A = "minute", E = "second"
     return n.getFullYear() % 4 ? 365 : 366;
   }
 };
-function v(n, t, e) {
+function M(n, t, e) {
   return n = n + "", t = t >> 0, e = String(typeof e < "u" ? e : " "), n.length > t ? String(n) : (t = t - n.length, t > e.length && (e += e.repeat(t / e.length)), e.slice(0, t) + String(n));
 }
 function p(n, t) {
@@ -181,14 +181,14 @@ function u(n, t) {
     i === "append_to" ? t.append_to.appendChild(e) : i === "innerHTML" ? e.innerHTML = t.innerHTML : i === "clipPath" ? e.setAttribute("clip-path", "url(#" + t[i] + ")") : e.setAttribute(i, t[i]);
   return e;
 }
-function S(n, t, e, i) {
-  const s = W(n, t, e, i);
+function H(n, t, e, i) {
+  const s = q(n, t, e, i);
   if (s === n) {
     const r = document.createEvent("HTMLEvents");
     r.initEvent("click", !0, !0), r.eventName = "click", s.dispatchEvent(r);
   }
 }
-function W(n, t, e, i, s = "0.4s", r = "0.1s") {
+function q(n, t, e, i, s = "0.4s", r = "0.1s") {
   const a = n.querySelector("animate");
   if (a)
     return p.attr(a, {
@@ -208,11 +208,11 @@ function W(n, t, e, i, s = "0.4s", r = "0.1s") {
     calcMode: "spline",
     values: e + ";" + i,
     keyTimes: "0; 1",
-    keySplines: q("ease-out")
+    keySplines: F("ease-out")
   });
   return n.appendChild(o), n;
 }
-function q(n) {
+function F(n) {
   return {
     ease: ".25 .1 .25 1",
     linear: "0 0 1 1",
@@ -249,7 +249,7 @@ p.attr = (n, t, e) => {
   }
   n.setAttribute(t, e);
 };
-class F {
+class O {
   constructor(t, e, i) {
     this.gantt = t, this.from_task = e, this.to_task = i, this.calculate_path(), this.draw();
   }
@@ -304,7 +304,7 @@ class F {
     this.calculate_path(), this.element.setAttribute("d", this.path);
   }
 }
-class O {
+class I {
   constructor(t, e) {
     this.set_defaults(t, e), this.prepare_wrappers(), this.prepare_helpers(), this.refresh();
   }
@@ -358,7 +358,7 @@ class O {
       ry: this.corner_radius,
       class: "bar",
       append_to: this.bar_group
-    }), this.task.color && (this.$bar.style.fill = this.task.color), S(this.$bar, "width", 0, this.width), this.invalid && this.$bar.classList.add("bar-invalid");
+    }), this.task.color && (this.$bar.style.fill = this.task.color), H(this.$bar, "width", 0, this.width), this.invalid && this.$bar.classList.add("bar-invalid");
   }
   draw_expected_progress_bar() {
     this.invalid || (this.$expected_bar_progress = u("rect", {
@@ -370,7 +370,7 @@ class O {
       ry: this.corner_radius,
       class: "bar-expected-progress",
       append_to: this.bar_group
-    }), S(
+    }), H(
       this.$expected_bar_progress,
       "width",
       0,
@@ -402,7 +402,7 @@ class O {
       width: this.width,
       left: e
     });
-    this.$date_highlight = i, this.gantt.$lower_header.prepend(this.$date_highlight), S(this.$bar_progress, "width", 0, this.progress_width);
+    this.$date_highlight = i, this.gantt.$lower_header.prepend(this.$date_highlight), H(this.$bar_progress, "width", 0, this.progress_width);
   }
   calculate_progress_width() {
     const t = this.$bar.getWidth(), e = this.x + t, i = this.gantt.config.ignored_positions.reduce((h, g) => h + (g >= this.x && g < e), 0) * this.gantt.config.column_width;
@@ -537,7 +537,7 @@ class O {
       var s, r;
       clearTimeout(e), this.gantt.options.popup_on === "hover" && ((r = (s = this.gantt.popup) == null ? void 0 : s.hide) == null || r.call(s)), this.gantt.$container.querySelector(`.highlight-${t}`).classList.add("hide");
     }), p.on(this.group, "click", () => {
-      this.gantt.trigger_event("click", [this.task]);
+      this.action_completed || this.gantt.trigger_event("click", [this.task]);
     }), p.on(this.group, "dblclick", (s) => {
       this.action_completed || (this.group.classList.remove("active"), this.gantt.popup && this.gantt.popup.parent.classList.remove("hide"), this.gantt.trigger_event("double_click", [this.task]));
     });
@@ -670,7 +670,7 @@ class O {
       t.update();
   }
 }
-class I {
+class z {
   constructor(t, e, i) {
     this.parent = t, this.popup_func = e, this.gantt = i, this.make();
   }
@@ -712,7 +712,7 @@ function X(n) {
   const t = n.getFullYear();
   return t - t % 10 + "";
 }
-function z(n, t, e) {
+function B(n, t, e) {
   let i = d.add(n, 6, "day"), s = i.getMonth() !== n.getMonth() ? "D MMM" : "D", r = !t || n.getMonth() !== t.getMonth() ? "D MMM" : "D";
   return `${d.format(n, r, e)} - ${d.format(i, s, e)}`;
 }
@@ -759,7 +759,7 @@ const y = [
     step: "7d",
     date_format: "YYYY-MM-DD",
     column_width: 140,
-    lower_text: z,
+    lower_text: B,
     upper_text: (n, t, e) => !t || n.getMonth() !== t.getMonth() ? d.format(n, "MMMM", e) : "",
     thick_line: (n) => n.getDate() >= 1 && n.getDate() <= 7,
     upper_text_frequency: 4
@@ -785,7 +785,7 @@ const y = [
     lower_text: "YYYY",
     snap_at: "30d"
   }
-], B = {
+], N = {
   arrow_curve: 5,
   auto_move_label: !1,
   bar_corner_radius: 3,
@@ -832,7 +832,7 @@ const y = [
   view_modes: y,
   is_weekend: (n) => n.getDay() === 0 || n.getDay() === 6
 };
-class N {
+class U {
   constructor(t, e, i) {
     this.setup_wrapper(t), this.setup_options(i), this.setup_tasks(e), this.change_view_mode(), this.bind_events();
   }
@@ -876,7 +876,7 @@ class N {
         ), s;
       }
       return i;
-    }), t.view_mode = t.view_modes[0]), this.options = { ...B, ...t };
+    }), t.view_mode = t.view_modes[0]), this.options = { ...N, ...t };
     const e = {
       "grid-height": "container_height",
       "bar-height": "bar_height",
@@ -1227,6 +1227,11 @@ class N {
                    M0,4 l4,-4
                    M3,5 l2,-2"
                 style="stroke:grey; stroke-width:0.3" />
+        </pattern>`, this.layers.grid.innerHTML += `<pattern id="holidayHatch" patternUnits="userSpaceOnUse" width="4" height="4">
+          <path d="M-1,1 l2,-2
+                   M0,4 l4,-4
+                   M3,5 l2,-2"
+                style="stroke:#ff9999; stroke-width:0.5" />
         </pattern>`;
     for (let i = new Date(this.gantt_start); i <= this.gantt_end; i.setDate(i.getDate() + 1)) {
       if (!this.config.ignored_dates.find(
@@ -1237,7 +1242,7 @@ class N {
         d.diff(i, this.gantt_start) + "d",
         this.config.unit
       ) / this.config.step;
-      this.config.ignored_positions.push(s * this.config.column_width), u("rect", {
+      this.config.ignored_positions.push(s * this.config.column_width), this.options.get_ignored_type && this.options.get_ignored_type(i), u("rect", {
         x: s * this.config.column_width,
         y: this.config.header_height,
         width: this.config.column_width,
@@ -1263,7 +1268,7 @@ class N {
         let i = this.create_el({
           left: t.x,
           top: t.lower_y,
-          classes: "lower-text date_" + k(t.formatted_date),
+          classes: "lower-text date_" + D(t.formatted_date),
           append_to: this.$lower_header
         });
         i.innerText = t.lower_text;
@@ -1297,7 +1302,7 @@ class N {
     let r = this.config.view_mode.upper_text, a = this.config.view_mode.lower_text;
     return r ? typeof r == "string" && (this.config.view_mode.upper_text = (o) => d.format(o, r, this.options.language)) : this.config.view_mode.upper_text = () => "", a ? typeof a == "string" && (this.config.view_mode.lower_text = (o) => d.format(o, a, this.options.language)) : this.config.view_mode.lower_text = () => "", {
       date: t,
-      formatted_date: k(
+      formatted_date: D(
         d.format(
           t,
           this.config.date_format,
@@ -1322,7 +1327,7 @@ class N {
   }
   make_bars() {
     this.bars = this.tasks.map((t) => {
-      const e = new O(this, t);
+      const e = new I(this, t);
       return this.layers.bar.appendChild(e.group), e;
     });
   }
@@ -1334,7 +1339,7 @@ class N {
         const s = this.get_task(i);
         if (!s)
           return;
-        const r = new F(
+        const r = new O(
           this,
           this.bars[s._index],
           // from_task
@@ -1407,7 +1412,7 @@ class N {
     if (t < this.gantt_start || t > this.gantt_end)
       return null;
     let e = /* @__PURE__ */ new Date(), i = this.$container.querySelector(
-      ".date_" + k(
+      ".date_" + D(
         d.format(
           e,
           this.config.date_format,
@@ -1417,7 +1422,7 @@ class N {
     ), s = 0;
     for (; !i && s < this.config.step; )
       e = d.add(e, -1, this.config.unit), i = this.$container.querySelector(
-        ".date_" + k(
+        ".date_" + D(
           d.format(
             e,
             this.config.date_format,
@@ -1547,8 +1552,8 @@ class N {
       ), m = this.upperTexts.find(
         (b) => b.textContent === w
       ), m !== this.$current && (this.$current && this.$current.classList.remove("current-upper"), m.classList.add("current-upper"), this.$current = m), i = l.currentTarget.scrollLeft;
-      let [x, $, M] = this.get_start_end_positions();
-      i > M + 100 ? (this.$adjust.innerHTML = "&larr;", this.$adjust.classList.remove("hide"), this.$adjust.onclick = () => {
+      let [x, $, k] = this.get_start_end_positions();
+      i > k + 100 ? (this.$adjust.innerHTML = "&larr;", this.$adjust.classList.remove("hide"), this.$adjust.onclick = () => {
         this.$container.scrollTo({
           left: $,
           behavior: "smooth"
@@ -1581,14 +1586,18 @@ class N {
           if (s)
             continue;
           let x = 0;
-          m.dependencies.forEach((M) => {
-            let b = this.get_bar(M);
-            if (b) {
-              let H = b.$bar.getX() + b.$bar.getWidth();
-              H > x && (x = H);
+          m.dependencies.forEach((b) => {
+            let v = this.get_bar(b);
+            if (v) {
+              let C = v.$bar.getX() + v.$bar.getWidth();
+              C > x && (x = C);
             }
           });
-          let $ = Math.max(w.$bar.ox, x);
+          let $ = Math.max(w.$bar.ox, x), k = !0;
+          for (; k; )
+            this.config.ignored_positions.find(
+              (v) => Math.abs(v - $) < 1
+            ) !== void 0 ? $ += this.config.column_width : k = !1;
           w.$bar.finaldx = $ - w.$bar.ox, w.update_bar_position({ x: $ });
         }
     }), document.addEventListener("mouseup", () => {
@@ -1658,16 +1667,14 @@ class N {
     }
     const r = t % (this.config.column_width / i);
     let a = t - r + (r < this.config.column_width / i * 2 ? 0 : this.config.column_width / i), o = e + a;
-    const h = a > 0 ? 1 : -1;
-    let g = this.get_ignored_region(o, h);
-    for (; g.length; )
-      o += this.config.column_width * h, g = this.get_ignored_region(o, h), g.length || (o -= this.config.column_width * h);
+    const h = a >= 0 ? 1 : -1;
+    let g = this.get_ignored_region(o);
+    for (; g.length > 0; )
+      o += this.config.column_width * h, g = this.get_ignored_region(o);
     return o - e;
   }
-  get_ignored_region(t, e = 1) {
-    return e === 1 ? this.config.ignored_positions.filter((i) => t > i && t <= i + this.config.column_width) : this.config.ignored_positions.filter(
-      (i) => t >= i && t < i + this.config.column_width
-    );
+  get_ignored_region(t) {
+    return this.config.ignored_positions.filter((e) => t >= e && t < e + this.config.column_width);
   }
   unselect_all() {
     this.popup && this.popup.parent.classList.add("hide"), this.$container.querySelectorAll(".date-range-highlight").forEach((t) => t.classList.add("hide"));
@@ -1682,7 +1689,7 @@ class N {
     return this.bars.find((e) => e.task.id === t);
   }
   show_popup(t) {
-    this.options.popup !== !1 && (this.popup || (this.popup = new I(
+    this.options.popup !== !1 && (this.popup || (this.popup = new z(
       this.$popup_wrapper,
       this.options.popup,
       this
@@ -1728,7 +1735,7 @@ class N {
     this.$svg.innerHTML = "", (e = (t = this.$header) == null ? void 0 : t.remove) == null || e.call(t), (s = (i = this.$side_header) == null ? void 0 : i.remove) == null || s.call(i), (a = (r = this.$current_highlight) == null ? void 0 : r.remove) == null || a.call(r), (h = (o = this.$extras) == null ? void 0 : o.remove) == null || h.call(o), (l = (g = this.popup) == null ? void 0 : g.hide) == null || l.call(g);
   }
 }
-N.VIEW_MODE = {
+U.VIEW_MODE = {
   HOUR: y[0],
   QUARTER_DAY: y[1],
   HALF_DAY: y[2],
@@ -1740,9 +1747,9 @@ N.VIEW_MODE = {
 function j(n) {
   return n.name + "_" + Math.random().toString(36).slice(2, 12);
 }
-function k(n) {
+function D(n) {
   return n.replaceAll(" ", "_").replaceAll(":", "_").replaceAll(".", "_");
 }
 export {
-  N as default
+  U as default
 };
