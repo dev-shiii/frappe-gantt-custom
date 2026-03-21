@@ -1517,29 +1517,30 @@ export default class Gantt {
             (rem < (this.config.column_width / unit_length) * 2
                 ? 0
                 : this.config.column_width / unit_length);
+        
         let final_pos = ox + final_dx;
 
-        const drn = final_dx > 0 ? 1 : -1;
-        let ignored_regions = this.get_ignored_region(final_pos, drn);
-        while (ignored_regions.length) {
+        // If dx is 0 or positive, push right (1). If negative, push left (-1).
+        const drn = final_dx >= 0 ? 1 : -1; 
+        
+        let ignored_regions = this.get_ignored_region(final_pos);
+        
+        // Push continuously until we land on a safe, non-holiday date
+        while (ignored_regions.length > 0) {
             final_pos += this.config.column_width * drn;
-            ignored_regions = this.get_ignored_region(final_pos, drn);
-            if (!ignored_regions.length)
-                final_pos -= this.config.column_width * drn;
+            ignored_regions = this.get_ignored_region(final_pos);
         }
+        
         return final_pos - ox;
     }
 
-    get_ignored_region(pos, drn = 1) {
-        if (drn === 1) {
-            return this.config.ignored_positions.filter((val) => {
-                return pos > val && pos <= val + this.config.column_width;
-            });
-        } else {
-            return this.config.ignored_positions.filter(
-                (val) => pos >= val && pos < val + this.config.column_width,
-            );
-        }
+    get_ignored_region(pos) {
+        // We don't need direction-specific logic. 
+        // If the task's start position falls inside the holiday block, it's ignored.
+        return this.config.ignored_positions.filter((val) => {
+            // Inclusive of the exact start (>=), exclusive of the end (<)
+            return pos >= val && pos < val + this.config.column_width;
+        });
     }
 
     unselect_all() {
