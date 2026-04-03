@@ -733,6 +733,7 @@ export default class Gantt {
         const height =
             (this.options.bar_height + this.options.padding) *
             this.tasks.length;
+            
         this.layers.grid.innerHTML += `<pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="4" height="4">
           <path d="M-1,1 l2,-2
                    M0,4 l4,-4
@@ -753,20 +754,45 @@ export default class Gantt {
                     !this.config.ignored_function(d))
             )
                 continue;
+            
             let diff =
                 date_utils.convert_scales(
                     date_utils.diff(d, this.gantt_start) + 'd',
                     this.config.unit,
                 ) / this.config.step;
 
-            this.config.ignored_positions.push(diff * this.config.column_width);
+            // This is the exact X coordinate for the start of the day
+            let x_pos = diff * this.config.column_width;
+            this.config.ignored_positions.push(x_pos);
+            
+            let is_specific_holiday = false;
+            if (this.options.is_holiday && this.options.is_holiday(d)) {
+                is_specific_holiday = true;
+            }
+
+            // Calculate exact pixel width of 1 day based on current zoom
+            let unitToDays = { hour: 1/24, day: 1, month: 30, year: 365 };
+            let daysInUnit = unitToDays[this.config.unit] || 1;
+            let day_width = (this.config.column_width / this.config.step) / daysInUnit;
+
+            // Force a minimum width of 4px so it never vanishes into anti-aliasing
+            let render_width = Math.max(day_width, 4);
+
+            // --- COLOR LOGIC BAKED DIRECTLY INTO THE LIBRARY ---
+            let opacity = day_width < 10 ? '0.45' : '0.12';
+            let holidayColor = `rgba(54, 162, 235, ${opacity})`;
+            
+            let fillStyle = is_specific_holiday ? `fill: ${holidayColor};` : 'fill: url(#diagonalHatch);';
+            // ---------------------------------------------------
+
+            // Set up the SVG configuration
             createSVG('rect', {
-                x: diff * this.config.column_width,
+                x: x_pos,
                 y: this.config.header_height,
-                width: this.config.column_width,
+                width: render_width, 
                 height: height,
-                class: 'ignored-bar',
-                style: 'fill: url(#diagonalHatch);',
+                class: is_specific_holiday ? 'ignored-bar holiday-bar' : 'ignored-bar',
+                style: fillStyle,
                 append_to: this.$svg,
             });
         }
