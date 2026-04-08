@@ -1176,10 +1176,14 @@ export default class Gantt {
             parent_bar_id = bar_wrapper.getAttribute('data-id');
             let ids;
             if (this.options.move_dependencies) {
-                ids = [
+                // Grab the dragged bar, all its children, AND all its parents
+                let raw_ids = [
                     parent_bar_id,
                     ...this.get_all_dependent_tasks(parent_bar_id),
+                    ...this.get_all_parent_tasks(parent_bar_id)
                 ];
+                // Filter out any duplicates
+                ids = [...new Set(raw_ids)];
             } else {
                 ids = [parent_bar_id];
             }
@@ -1361,34 +1365,67 @@ export default class Gantt {
             }
 
             if (this.options.move_dependencies && !this.options.readonly && !this.options.readonly_dates) {
+                const is_dragging_right = main_bar.$bar.finaldx >= 0;
+
                 for (let i = 1; i < bars.length; i++) {
                     let bar = bars[i];
                     let task = bar.task;
 
                     if (is_resizing_left) continue;
 
-                    let max_parent_end_x = 0;
+                    let new_x = bar.$bar.ox; // Default to original position
 
-                    task.dependencies.forEach(dep_id => {
-                        let parent_bar = this.get_bar(dep_id);
-                        if (parent_bar) {
-                            let parent_end_x = parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
-                            if (parent_end_x > max_parent_end_x) {
-                                max_parent_end_x = parent_end_x;
+                    if (is_dragging_right) {
+                        // --- FORWARD CASCADE (Pushing Children Right) ---
+                        let max_parent_end_x = 0;
+                        let has_parent_in_group = false;
+
+                        task.dependencies.forEach(dep_id => {
+                            let parent_bar = this.get_bar(dep_id);
+                            // Only check against parents that are part of this specific drag
+                            if (parent_bar && bars.includes(parent_bar)) {
+                                has_parent_in_group = true;
+                                let parent_end_x = parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
+                                if (parent_end_x > max_parent_end_x) {
+                                    max_parent_end_x = parent_end_x;
+                                }
                             }
+                        });
+                        
+                        if (has_parent_in_group) {
+                            new_x = Math.max(bar.$bar.ox, max_parent_end_x);
+                            new_x = this.get_safe_x(new_x, 1); // Hop right over holidays
                         }
-                    });
-                    
-                    let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
-                    
-                    // --- THE FLAWLESS CASCADE SKIP ---
-                    // Always push right (drn = 1). This perfectly skips any amount of consecutive
-                    // holidays and flawlessly preserves your fractional time offset!
-                    new_x = this.get_safe_x(new_x, 1);
-                    // ---------------------------------
 
-                    bar.$bar.finaldx = new_x - bar.$bar.ox;
-                    bar.update_bar_position({ x: new_x });
+                    } else {
+                        // --- BACKWARD CASCADE (Pushing Parents Left) ---
+                        let min_child_start_x = Infinity;
+                        let has_child_in_group = false;
+
+                        bars.forEach(child_bar => {
+                            // If this child_bar lists the current task as a dependency (parent)
+                            if (child_bar.task.dependencies.includes(task.id)) {
+                                has_child_in_group = true;
+                                let child_start_x = child_bar.$bar.getX();
+                                if (child_start_x < min_child_start_x) {
+                                    min_child_start_x = child_start_x;
+                                }
+                            }
+                        });
+
+                        if (has_child_in_group) {
+                            // Calculate where the parent needs to end to avoid overlapping the child
+                            let target_start_x = min_child_start_x - bar.$bar.getWidth();
+                            new_x = Math.min(bar.$bar.ox, target_start_x);
+                            new_x = this.get_safe_x(new_x, -1); // Hop left over holidays
+                        }
+                    }
+
+                    // Apply the movement if the position actually changed
+                    if (new_x !== bar.$bar.ox) {
+                        bar.$bar.finaldx = new_x - bar.$bar.ox;
+                        bar.update_bar_position({ x: new_x });
+                    }
                 }
             }
         });
@@ -1513,6 +1550,25 @@ export default class Gantt {
             
             out = out.concat(new_deps);
             to_process = new_deps;
+        }
+
+        return out;
+    }
+    get_all_parent_tasks(task_id) {
+        let out = [];
+        let to_process = [task_id];
+        
+        while (to_process.length > 0) {
+            const parents = to_process.reduce((acc, curr) => {
+                const task = this.get_task(curr);
+                // If a task lists 'curr' as a dependency, it is a parent
+                return acc.concat(task ? task.dependencies : []);
+            }, []);
+
+            const new_parents = parents.filter((d) => d && !out.includes(d) && !to_process.includes(d));
+            
+            out = out.concat(new_parents);
+            to_process = new_parents;
         }
 
         return out;

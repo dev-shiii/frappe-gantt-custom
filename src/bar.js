@@ -427,16 +427,14 @@ export default class Bar {
         const bar = this.$bar;
 
         if (x) {
-            const xs = this.task.dependencies.map((dep) => {
-                return this.gantt.get_bar(dep).$bar.getX();
-            });
-            const valid_x = xs.reduce((prev, curr) => {
-                return prev && x >= curr;
-            }, true);
-            if (!valid_x) return;
+            // --- THE BLOCKADE IS DESTROYED ---
+            // Frappe Gantt used to check dependencies here and force an early 'return;' 
+            // if a child was dragged left of a parent. By removing that check, 
+            // we unlock full bi-directional movement.
             this.update_attr(bar, 'x', x);
             this.x = x;
             this.$date_highlight.style.left = x + 'px';
+            // ---------------------------------
         }
         if (width > 0) {
             this.update_attr(bar, 'width', width);
