@@ -1378,19 +1378,14 @@ export default class Gantt {
                             }
                         }
                     });
+                    
                     let new_x = Math.max(bar.$bar.ox, max_parent_end_x);
-                    let inside_holiday = true;
-                    while (inside_holiday) {
-                        let hit_holiday = this.config.ignored_positions.find(
-                            (holiday_x) => Math.abs(holiday_x - new_x) < 1
-                        );
-                        
-                        if (hit_holiday !== undefined) {
-                            new_x += this.config.column_width;
-                        } else {
-                            inside_holiday = false;
-                        }
-                    }
+                    
+                    // --- THE FLAWLESS CASCADE SKIP ---
+                    // Always push right (drn = 1). This perfectly skips any amount of consecutive
+                    // holidays and flawlessly preserves your fractional time offset!
+                    new_x = this.get_safe_x(new_x, 1);
+                    // ---------------------------------
 
                     bar.$bar.finaldx = new_x - bar.$bar.ox;
                     bar.update_bar_position({ x: new_x });
@@ -1523,6 +1518,43 @@ export default class Gantt {
         return out;
     }
 
+    get_safe_x(x, drn = 1) {
+        // 1. Calculate total units (days) from the start
+        let units_from_start = x / this.config.column_width;
+        
+        // 2. Separate the "Whole Day" integer from the "Fractional Time"
+        // E.g., 5.4 days -> whole_units = 5, fraction = 0.4 (preserves time of day!)
+        let whole_units = Math.floor(units_from_start);
+        let fraction = units_from_start - whole_units;
+        
+        let is_safe = false;
+        let loop = 0;
+        
+        while (!is_safe && loop < 100) {
+            // 3. Get the exact pure Date object for this whole day (00:00:00)
+            let current_date = date_utils.add(
+                this.gantt_start, 
+                whole_units * this.config.step, 
+                this.config.unit
+            );
+            
+            // 4. Ask your React wrapper directly! No more fragile pixel math.
+            let hit_weekend = this.options.is_weekend && this.options.is_weekend(current_date);
+            let hit_holiday = this.options.is_holiday && this.options.is_holiday(current_date);
+            
+            if (hit_weekend || hit_holiday) {
+                // If it's an off-day, cleanly jump exactly 1 integer day forward/backward
+                whole_units += drn; 
+                loop++;
+            } else {
+                is_safe = true; // Clean landing on a working day!
+            }
+        }
+        
+        // 5. Put the exact fractional time back and multiply by the column width
+        return (whole_units + fraction) * this.config.column_width;
+    }
+
     get_snap_position(dx, ox) {
         let unit_length = 1;
         const default_snap =
@@ -1545,27 +1577,22 @@ export default class Gantt {
                 : this.config.column_width / unit_length);
         
         let final_pos = ox + final_dx;
-
-        // If dx is 0 or positive, push right (1). If negative, push left (-1).
+        
+        // Direction of drag: 1 for right, -1 for left
         const drn = final_dx >= 0 ? 1 : -1; 
         
-        let ignored_regions = this.get_ignored_region(final_pos);
-        
-        // Push continuously until we land on a safe, non-holiday date
-        while (ignored_regions.length > 0) {
-            final_pos += this.config.column_width * drn;
-            ignored_regions = this.get_ignored_region(final_pos);
-        }
-        
-        return final_pos - ox;
+        // Use our new flawless integer snapper!
+        return this.get_safe_x(final_pos, drn) - ox;
     }
 
     get_ignored_region(pos) {
-        // We don't need direction-specific logic. 
-        // If the task's start position falls inside the holiday block, it's ignored.
+        // Subtract a tiny fraction so we check the pixel just INSIDE the end of the bar.
+        // This prevents the progress bar from "looking ahead" into the next day's holiday!
+        const check_pos = pos - 0.01;
+        
         return this.config.ignored_positions.filter((val) => {
             // Inclusive of the exact start (>=), exclusive of the end (<)
-            return pos >= val && pos < val + this.config.column_width;
+            return check_pos >= val && check_pos < val + this.config.column_width;
         });
     }
 
