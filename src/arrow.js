@@ -11,35 +11,40 @@ export default class Arrow {
     }
 
     calculate_path() {
-        let start_x =
-            this.from_task.$bar.getX() + this.from_task.$bar.getWidth() / 2;
+    // Helper to get visual row
+    const from_row = this.from_task.task._row !== undefined
+        ? this.from_task.task._row : this.from_task.task._index;
+    const to_row = this.to_task.task._row !== undefined
+        ? this.to_task.task._row : this.to_task.task._index;
 
-        const condition = () =>
-            this.to_task.$bar.getX() < start_x + this.gantt.options.padding &&
-            start_x > this.from_task.$bar.getX() + this.gantt.options.padding;
+    let start_x =
+        this.from_task.$bar.getX() + this.from_task.$bar.getWidth() / 2;
 
-        while (condition()) {
-            start_x -= 10;
-        }
+    const condition = () =>
+        this.to_task.$bar.getX() < start_x + this.gantt.options.padding &&
+        start_x > this.from_task.$bar.getX() + this.gantt.options.padding;
+
+    while (condition()) {
         start_x -= 10;
+    }
+    start_x -= 10;
 
-        let start_y =
-            this.gantt.config.header_height +
-            this.gantt.options.bar_height +
-            (this.gantt.options.padding + this.gantt.options.bar_height) *
-                this.from_task.task._index +
-            this.gantt.options.padding / 2;
+    let start_y =
+        this.gantt.config.header_height +
+        this.gantt.options.bar_height +
+        (this.gantt.options.padding + this.gantt.options.bar_height) *
+            from_row +                    // <-- was this.from_task.task._index
+        this.gantt.options.padding / 2;
 
-        let end_x = this.to_task.$bar.getX() - 13;
-        let end_y =
-            this.gantt.config.header_height +
-            this.gantt.options.bar_height / 2 +
-            (this.gantt.options.padding + this.gantt.options.bar_height) *
-                this.to_task.task._index +
-            this.gantt.options.padding / 2;
+    let end_x = this.to_task.$bar.getX() - 13;
+    let end_y =
+        this.gantt.config.header_height +
+        this.gantt.options.bar_height / 2 +
+        (this.gantt.options.padding + this.gantt.options.bar_height) *
+            to_row +                      // <-- was this.to_task.task._index
+        this.gantt.options.padding / 2;
 
-        const from_is_below_to =
-            this.from_task.task._index > this.to_task.task._index;
+    const from_is_below_to = from_row > to_row;
 
         let curve = this.gantt.options.arrow_curve;
         const clockwise = from_is_below_to ? 1 : 0;

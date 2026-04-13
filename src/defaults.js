@@ -150,6 +150,7 @@ const DEFAULT_OPTIONS = {
     readonly_progress: false,
     readonly_dates: false,
     readonly: false,
+    pack_done_tasks: false,
     hover_on_date: false,
     fixed_duration: false,
     scroll_to: 'today',

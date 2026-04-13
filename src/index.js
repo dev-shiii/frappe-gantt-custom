@@ -217,6 +217,15 @@ export default class Gantt {
                 return task;
             })
             .filter((t) => t);
+
+            this.tasks.forEach(t => { t._row = t._index; });
+
+    if (this.options.pack_done_tasks) {
+        this.apply_row_packing();
+    } else {
+        this._visual_row_count = this.tasks.length;
+    }
+
         this.setup_dependencies();
     }
 
@@ -229,6 +238,44 @@ export default class Gantt {
             }
         }
     }
+    apply_row_packing() {
+    const done_tasks = this.tasks.filter(t => t.done === true);
+    const active_tasks = this.tasks.filter(t => t.done !== true);
+
+    // Sort done tasks by start date for greedy bin-packing
+    done_tasks.sort((a, b) => a._start - b._start);
+
+    const packed_rows = []; // each element is an array of tasks in that row
+
+    for (let task of done_tasks) {
+        let placed = false;
+        for (let rowIdx = 0; rowIdx < packed_rows.length; rowIdx++) {
+            // Check time overlap with every task already in this row
+            const overlaps = packed_rows[rowIdx].some(existing =>
+                task._start < existing._end && existing._start < task._end
+            );
+            if (!overlaps) {
+                packed_rows[rowIdx].push(task);
+                task._row = rowIdx;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            packed_rows.push([task]);
+            task._row = packed_rows.length - 1;
+        }
+    }
+
+    // Active tasks keep original order, stacked below packed rows
+    const offset = packed_rows.length;
+    active_tasks.sort((a, b) => a._index - b._index);
+    active_tasks.forEach((task, i) => {
+        task._row = offset + i;
+    });
+
+    this._visual_row_count = offset + active_tasks.length;
+}
 
     refresh(tasks) {
         this.setup_tasks(tasks);
@@ -411,18 +458,19 @@ export default class Gantt {
         this.make_grid_ticks();
     }
 
-    make_grid_background() {
-        const grid_width = this.dates.length * this.config.column_width;
-        const grid_height = Math.max(
-            this.config.header_height +
-                this.options.padding +
-                (this.options.bar_height + this.options.padding) *
-                    this.tasks.length -
+   make_grid_background() {
+    const grid_width = this.dates.length * this.config.column_width;
+    const row_count = this._visual_row_count || this.tasks.length; // <-- CHANGED
+    const grid_height = Math.max(
+        this.config.header_height +
+            this.options.padding +
+            (this.options.bar_height + this.options.padding) *
+                row_count -                                        // <-- CHANGED
                 10,
-            this.options.container_height !== 'auto'
-                ? this.options.container_height
-                : 0,
-        );
+        this.options.container_height !== 'auto'
+            ? this.options.container_height
+            : 0,
+    );
 
         createSVG('rect', {
             x: 0,
@@ -727,12 +775,13 @@ export default class Gantt {
     }
 
     make_grid_highlights() {
-        this.highlight_holidays();
-        this.config.ignored_positions = [];
+    this.highlight_holidays();
+    this.config.ignored_positions = [];
 
-        const height =
-            (this.options.bar_height + this.options.padding) *
-            this.tasks.length;
+    const row_count = this._visual_row_count || this.tasks.length; // <-- CHANGED
+    const height =
+        (this.options.bar_height + this.options.padding) *
+        row_count;
             
         this.layers.grid.innerHTML += `<pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="4" height="4">
           <path d="M-1,1 l2,-2

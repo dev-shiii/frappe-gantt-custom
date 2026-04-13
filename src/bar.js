@@ -607,11 +607,12 @@ export default class Bar {
     }
 
     compute_y() {
-        this.y =
-            this.gantt.config.header_height +
-            this.gantt.options.padding / 2 +
-            this.task._index * (this.height + this.gantt.options.padding);
-    }
+    const row = this.task._row !== undefined ? this.task._row : this.task._index;
+    this.y =
+        this.gantt.config.header_height +
+        this.gantt.options.padding / 2 +
+        row * (this.height + this.gantt.options.padding);
+}
 
     compute_duration() {
         let actual_duration_in_days = 0,
