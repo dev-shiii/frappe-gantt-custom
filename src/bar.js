@@ -96,7 +96,9 @@ export default class Bar {
             this.prepare_expected_progress_values();
             this.draw_expected_progress_bar();
         }
-        this.draw_label();
+        if (!(this.task.done && this.gantt.options.pack_done_tasks)) {
+    this.draw_label();
+}
         this.draw_resize_handles();
 
         if (this.task.thumbnail) {
@@ -362,7 +364,8 @@ export default class Bar {
         let timeout;
         $.on(this.group, 'mouseenter', (e) => {
             timeout = setTimeout(() => {
-                if (this.gantt.options.popup_on === 'hover')
+                const isPackedDone = this.task.done && this.gantt.options.pack_done_tasks;
+if (this.gantt.options.popup_on === 'hover' || isPackedDone)
                     this.gantt.show_popup({
                         x: e.offsetX || e.layerX,
                         y: e.offsetY || e.layerY,
@@ -376,8 +379,9 @@ export default class Bar {
         });
         $.on(this.group, 'mouseleave', () => {
             clearTimeout(timeout);
-            if (this.gantt.options.popup_on === 'hover')
-                this.gantt.popup?.hide?.();
+            const isPackedDone = this.task.done && this.gantt.options.pack_done_tasks;
+if (this.gantt.options.popup_on === 'hover' || isPackedDone)
+    this.gantt.popup?.hide?.();
             this.gantt.$container
                 .querySelector(`.highlight-${task_id}`)
                 .classList.add('hide');
@@ -455,8 +459,9 @@ export default class Bar {
     }
 
     update_label_position_on_horizontal_scroll({ x, sx }) {
-        const container = this.gantt.$container;
         const label = this.group.querySelector('.bar-label');
+if (!label) return;
+        const container = this.gantt.$container;
         const img = this.group.querySelector('.bar-img') || '';
         const img_mask = this.bar_group.querySelector('.img_mask') || '';
 
@@ -683,10 +688,12 @@ export default class Bar {
     }
 
     update_label_position() {
-        const img_mask = this.bar_group.querySelector('.img_mask') || '';
-        const bar = this.$bar,
-            label = this.group.querySelector('.bar-label'),
-            img = this.group.querySelector('.bar-img');
+    const label = this.group.querySelector('.bar-label');
+    if (!label) return;
+
+    const img_mask = this.bar_group.querySelector('.img_mask') || '';
+    const bar = this.$bar;
+    const img = this.group.querySelector('.bar-img');
 
         let padding = 5;
         let x_offset_label_img = this.image_size + 10;
