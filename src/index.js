@@ -68,6 +68,7 @@ export default class Gantt {
             classes: 'popup-wrapper',
             append_to: this.$container,
         });
+        
     }
 
     setup_options(options) {
@@ -130,6 +131,9 @@ export default class Gantt {
         } else {
             this.config.ignored_function = this.options.ignore;
         }
+        if (this.options.rtl && this.$container) {
+        this.$container.classList.add('gantt-rtl');
+    }
     }
 
     update_options(options) {
@@ -413,6 +417,7 @@ export default class Gantt {
 
     render() {
         this.clear();
+        this.inject_rtl_styles();
         this.setup_layers();
         this.make_grid();
         this.make_dates();
@@ -423,6 +428,43 @@ export default class Gantt {
         this.set_dimensions();
         this.set_scroll_position(this.options.scroll_to);
     }
+    inject_rtl_styles() {
+    if (!this.options.rtl) return;
+    const id = 'gantt-rtl-styles';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `
+        .gantt-rtl svg.gantt {
+            transform: scaleX(-1);
+        }
+        .gantt-rtl .grid-header {
+            transform: scaleX(-1);
+        }
+        .gantt-rtl svg.gantt text {
+            transform-box: fill-box;
+            transform-origin: center;
+            transform: scaleX(-1);
+        }
+        .gantt-rtl .lower-text,
+        .gantt-rtl .upper-text {
+            transform: scaleX(-1);
+        }
+        .gantt-rtl .side-header,
+        .gantt-rtl .today-button,
+        .gantt-rtl .viewmode-select {
+            transform: scaleX(-1);
+        }
+        .gantt-rtl .popup-wrapper {
+            direction: rtl;
+            text-align: right;
+        }
+        .gantt-rtl .holiday-label {
+            transform: scaleX(-1);
+        }
+    `;
+    document.head.appendChild(style);
+}
 
     setup_layers() {
         this.layers = {};
@@ -754,12 +796,16 @@ export default class Gantt {
             this.config.unit,
         );
 
-        const left =
-            (diff_in_units / this.config.step) * this.config.column_width;
+        let left =
+    (diff_in_units / this.config.step) * this.config.column_width;
+            if (this.options.rtl) {
+    const total_width = this.dates.length * this.config.column_width;
+    left = total_width - left;
+}
 
         this.$current_highlight = this.create_el({
-            top: this.config.header_height,
-            left,
+            top: this.config.header_height - 6,
+    left: left - 2.5,
             height: this.grid_height - this.config.header_height,
             classes: 'current-highlight',
             append_to: this.$container,
@@ -1733,16 +1779,20 @@ export default class Gantt {
     }
 
     show_popup(opts) {
-        if (this.options.popup === false) return;
-        if (!this.popup) {
-            this.popup = new Popup(
-                this.$popup_wrapper,
-                this.options.popup,
-                this,
-            );
-        }
-        this.popup.show(opts);
+    if (this.options.popup === false) return;
+    if (this.options.rtl) {
+        const total_width = this.dates.length * this.config.column_width;
+        opts.x = total_width - opts.x;
     }
+    if (!this.popup) {
+        this.popup = new Popup(
+            this.$popup_wrapper,
+            this.options.popup,
+            this,
+        );
+    }
+    this.popup.show(opts);
+}
 
     hide_popup() {
         this.popup && this.popup.hide();
