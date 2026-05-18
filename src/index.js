@@ -1520,6 +1520,21 @@ export default class Gantt {
 
                         // Find direct children of `pusher`: any task whose
                         // dependencies array contains pusher_id.
+                        // Get pusher's original end position. If pusher hasn't
+                        // actually moved forward from its origin, do NOT push
+                        // children. This prevents "all bars on the same date"
+                        // from cascading on the very first pixel of drag.
+                        const pusher_snap = snap_by_id[pusher_id];
+                        const pusher_original_end_x = pusher_snap
+                            ? pusher_snap.ox + pusher_snap.owidth
+                            : pusher_bar.$bar.ox + pusher_bar.$bar.owidth;
+
+                        // If pusher's current end is at or before its original
+                        // end, the pusher hasn't moved forward enough to push
+                        // anyone. Bail out of this branch.
+                        if (pusher_end_x <= pusher_original_end_x) {
+                            return;
+                        }
                         const child_ids = this.dependency_map[pusher_id] || [];
 
                         for (const child_id of child_ids) {
@@ -1572,6 +1587,17 @@ export default class Gantt {
                     const propagate_backward = (pusher_bar) => {
                         const pusher_start_x = pusher_bar.$bar.getX();
                         const pusher_id = pusher_bar.task.id;
+
+                        // Same guard for backward — if pusher hasn't moved
+                        // back from its original start, don't push parents.
+                        const pusher_snap = snap_by_id[pusher_id];
+                        const pusher_original_start_x = pusher_snap
+                            ? pusher_snap.ox
+                            : pusher_bar.$bar.ox;
+
+                        if (pusher_start_x >= pusher_original_start_x) {
+                            return;
+                        }
 
                         // Find direct parents of `pusher`: pusher's own
                         // dependencies array IS its parents.
