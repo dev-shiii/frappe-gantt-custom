@@ -1269,20 +1269,35 @@ export default class Gantt {
             x_on_start = e.offsetX || e.layerX;
 
             parent_bar_id = bar_wrapper.getAttribute('data-id');
-            let ids;
-            if (this.options.move_dependencies) {
-                // Grab the dragged bar, all its children, AND all its parents
-                let raw_ids = [
-                    parent_bar_id,
-                    ...this.get_all_dependent_tasks(parent_bar_id),
-                    ...this.get_all_parent_tasks(parent_bar_id)
-                ];
-                // Filter out any duplicates
-                ids = [...new Set(raw_ids)];
-            } else {
-                ids = [parent_bar_id];
-            }
-            bars = ids.map((id) => this.get_bar(id));
+
+            // COLLISION-BASED CASCADE: at mousedown, only the grabbed bar is in
+            // the active drag set. Dependent/parent bars are added DYNAMICALLY
+            // during mousemove only when the moving bar physically touches them.
+            // This replaces frappe's "blanket cascade" (which used to shift the
+            // entire dependency tree even without collision) with the cleaner
+            // user-expected behavior: push only when the dragged bar actually
+            // bumps into a dependent or parent.
+            //
+            // We still snapshot ALL tasks in the project so we can quickly look
+            // them up for collision detection. They are NOT in `bars[]` yet —
+            // they are bystanders until/unless the drag pushes them.
+            bars = [this.get_bar(parent_bar_id)];
+
+            // Pre-snapshot every OTHER bar's original x/width so when we
+            // dynamically push them during mousemove, we know where they
+            // started. The bar itself stores .ox/.owidth/.finaldx already
+            // for the grabbed bar (set below); we mirror that for everyone
+            // so collision math is uniform.
+            this._all_bars_snapshot = this.bars.map((b) => {
+                const $b = b.$bar;
+                return {
+                    bar: b,
+                    id: b.task.id,
+                    ox: $b.getX(),
+                    owidth: $b.getWidth(),
+                    pushed: false, // true once this bar joins the active drag
+                };
+            });
 
             this.bar_being_dragged = false;
             pos = x_on_start;
@@ -1459,67 +1474,150 @@ export default class Gantt {
                 main_bar.update_bar_position({ x: main_bar.$bar.ox + main_bar.$bar.finaldx });
             }
 
+            // ---------------------------------------------------------------
+            // COLLISION-BASED CASCADE (replaces frappe's blanket cascade)
+            //
+            // Rules (per user spec):
+            //   - Forward drag: if grabbed bar's END crosses into a direct
+            //     CHILD's range, push that child forward (snap to grabbed-end,
+            //     hop over holidays/weekends via get_safe_x).
+            //   - That pushed child can in turn collide with ITS child →
+            //     cascade forward through the chain, one collision at a time.
+            //   - Backward drag: symmetric — if grabbed bar's START crosses
+            //     into a direct PARENT's range, push the parent backward.
+            //     Pushed parents can collide with their parents → cascade.
+            //   - Bars that aren't in a collision chain stay put.
+            //
+            // Holiday/off_day awareness comes from get_safe_x, which calls
+            // options.is_weekend (covers off_days like Fri/Sat) and
+            // options.is_holiday (covers factory_settings.holidays array).
+            // ---------------------------------------------------------------
             if (this.options.move_dependencies && !this.options.readonly && !this.options.readonly_dates) {
-                const is_dragging_right = main_bar.$bar.finaldx >= 0;
+                if (!is_resizing_left && !is_resizing_right) {
+                    const is_dragging_right = main_bar.$bar.finaldx >= 0;
+                    const grabbed_id = main_bar.task.id;
 
-                for (let i = 1; i < bars.length; i++) {
-                    let bar = bars[i];
-                    let task = bar.task;
+                    // Build a quick lookup from bar id → snapshot entry so
+                    // collision math always uses original positions, not the
+                    // already-pushed positions (which would compound errors).
+                    const snap_by_id = {};
+                    this._all_bars_snapshot.forEach((s) => { snap_by_id[s.id] = s; });
 
-                    if (is_resizing_left) continue;
+                    // Recursive collision propagation. `pusher` is the bar
+                    // doing the pushing (just moved). We find direct
+                    // dependents/parents that it now overlaps and shift them,
+                    // then recurse from each newly-shifted bar.
+                    //
+                    // We track visited ids in this drag pass so we never
+                    // double-process a bar (avoids infinite loop if the
+                    // dependency graph has cycles or diamond shapes).
+                    const visited = new Set([grabbed_id]);
 
-                    let new_x = bar.$bar.ox; // Default to original position
+                    const propagate_forward = (pusher_bar) => {
+                        const pusher_end_x =
+                            pusher_bar.$bar.getX() + pusher_bar.$bar.getWidth();
+                        const pusher_id = pusher_bar.task.id;
+
+                        // Find direct children of `pusher`: any task whose
+                        // dependencies array contains pusher_id.
+                        const child_ids = this.dependency_map[pusher_id] || [];
+
+                        for (const child_id of child_ids) {
+                            if (visited.has(child_id)) continue;
+                            const child_snap = snap_by_id[child_id];
+                            if (!child_snap) continue;
+                            const child_bar = child_snap.bar;
+
+                            // Use the child's CURRENT position to detect
+                            // collision. (If a previous pass already moved it,
+                            // we want the live position; if not, this equals
+                            // its original ox.)
+                            const child_start_x = child_bar.$bar.getX();
+
+                            // Collision: pusher_end has crossed into child_start.
+                            // Strict-greater so a perfect edge-touch
+                            // (end === start) does NOT trigger a push —
+                            // matches user's example: 1=15→16 doesn't push 2=18.
+                            if (pusher_end_x > child_start_x) {
+                                visited.add(child_id);
+
+                                // Target: place child's start exactly at
+                                // pusher's end, then nudge forward over any
+                                // holiday/off-day.
+                                let target_x = pusher_end_x;
+                                target_x = this.get_safe_x(target_x, 1);
+
+                                // Only move if it's actually a forward shift
+                                // (defensive — should always be true here).
+                                if (target_x > child_snap.ox) {
+                                    child_snap.pushed = true;
+                                    child_bar.$bar.finaldx = target_x - child_snap.ox;
+                                    child_bar.update_bar_position({ x: target_x });
+
+                                    // Recurse — this child may now hit ITS children.
+                                    propagate_forward(child_bar);
+                                }
+                            } else if (child_snap.pushed) {
+                                // Pusher backed off; if we previously pushed
+                                // this child, return it to its original spot.
+                                child_snap.pushed = false;
+                                child_bar.$bar.finaldx = 0;
+                                child_bar.update_bar_position({ x: child_snap.ox });
+                                // Also revert anyone we cascaded from it.
+                                this._revert_downstream(child_id, snap_by_id, visited);
+                            }
+                        }
+                    };
+
+                    const propagate_backward = (pusher_bar) => {
+                        const pusher_start_x = pusher_bar.$bar.getX();
+                        const pusher_id = pusher_bar.task.id;
+
+                        // Find direct parents of `pusher`: pusher's own
+                        // dependencies array IS its parents.
+                        const parent_ids = pusher_bar.task.dependencies || [];
+
+                        for (const parent_id of parent_ids) {
+                            if (visited.has(parent_id)) continue;
+                            const parent_snap = snap_by_id[parent_id];
+                            if (!parent_snap) continue;
+                            const parent_bar = parent_snap.bar;
+
+                            const parent_end_x =
+                                parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
+
+                            // Collision: pusher_start has crossed back into
+                            // parent_end. Strict-less for the same edge-touch
+                            // reason as forward.
+                            if (pusher_start_x < parent_end_x) {
+                                visited.add(parent_id);
+
+                                // Target: place parent's END exactly at pusher's
+                                // start → parent_start = pusher_start - parent_width.
+                                let target_x = pusher_start_x - parent_bar.$bar.getWidth();
+                                target_x = this.get_safe_x(target_x, -1);
+
+                                if (target_x < parent_snap.ox) {
+                                    parent_snap.pushed = true;
+                                    parent_bar.$bar.finaldx = target_x - parent_snap.ox;
+                                    parent_bar.update_bar_position({ x: target_x });
+
+                                    // Recurse — this parent may now hit ITS parents.
+                                    propagate_backward(parent_bar);
+                                }
+                            } else if (parent_snap.pushed) {
+                                parent_snap.pushed = false;
+                                parent_bar.$bar.finaldx = 0;
+                                parent_bar.update_bar_position({ x: parent_snap.ox });
+                                this._revert_upstream(parent_id, snap_by_id, visited);
+                            }
+                        }
+                    };
 
                     if (is_dragging_right) {
-                        // --- FORWARD CASCADE (Pushing Children Right) ---
-                        let max_parent_end_x = 0;
-                        let has_parent_in_group = false;
-
-                        task.dependencies.forEach(dep_id => {
-                            let parent_bar = this.get_bar(dep_id);
-                            // Only check against parents that are part of this specific drag
-                            if (parent_bar && bars.includes(parent_bar)) {
-                                has_parent_in_group = true;
-                                let parent_end_x = parent_bar.$bar.getX() + parent_bar.$bar.getWidth();
-                                if (parent_end_x > max_parent_end_x) {
-                                    max_parent_end_x = parent_end_x;
-                                }
-                            }
-                        });
-                        
-                        if (has_parent_in_group) {
-                            new_x = Math.max(bar.$bar.ox, max_parent_end_x);
-                            new_x = this.get_safe_x(new_x, 1); // Hop right over holidays
-                        }
-
+                        propagate_forward(main_bar);
                     } else {
-                        // --- BACKWARD CASCADE (Pushing Parents Left) ---
-                        let min_child_start_x = Infinity;
-                        let has_child_in_group = false;
-
-                        bars.forEach(child_bar => {
-                            // If this child_bar lists the current task as a dependency (parent)
-                            if (child_bar.task.dependencies.includes(task.id)) {
-                                has_child_in_group = true;
-                                let child_start_x = child_bar.$bar.getX();
-                                if (child_start_x < min_child_start_x) {
-                                    min_child_start_x = child_start_x;
-                                }
-                            }
-                        });
-
-                        if (has_child_in_group) {
-                            // Calculate where the parent needs to end to avoid overlapping the child
-                            let target_start_x = min_child_start_x - bar.$bar.getWidth();
-                            new_x = Math.min(bar.$bar.ox, target_start_x);
-                            new_x = this.get_safe_x(new_x, -1); // Hop left over holidays
-                        }
-                    }
-
-                    // Apply the movement if the position actually changed
-                    if (new_x !== bar.$bar.ox) {
-                        bar.$bar.finaldx = new_x - bar.$bar.ox;
-                        bar.update_bar_position({ x: new_x });
+                        propagate_backward(main_bar);
                     }
                 }
             }
@@ -1536,6 +1634,8 @@ export default class Gantt {
 
         $.on(this.$svg, 'mouseup', (e) => {
             this.bar_being_dragged = null;
+
+            // Fire date_changed for the grabbed bar (always in bars[]).
             bars.forEach((bar) => {
                 const $bar = bar.$bar;
                 if (!$bar.finaldx) return;
@@ -1543,6 +1643,20 @@ export default class Gantt {
                 bar.compute_progress();
                 bar.set_action_completed();
             });
+
+            // Also fire date_changed for any bars the collision cascade
+            // pushed during this drag. The wrapper's on_date_change handler
+            // already filters cascaded events out via isPrimary, so these
+            // events are still harmless — but firing them keeps frappe's
+            // internal _start/_end on each task in sync with the on-screen
+            // position before the upcoming silent refresh.
+            if (this._all_bars_snapshot) {
+                this._all_bars_snapshot.forEach((snap) => {
+                    if (!snap.pushed) return;
+                    snap.bar.date_changed();
+                });
+                this._all_bars_snapshot = null;
+            }
         });
 
         this.bind_bar_progress();
@@ -1648,6 +1762,49 @@ export default class Gantt {
         }
 
         return out;
+    }
+
+    /**
+     * Revert any bars we cascaded forward from `bar_id` during this drag pass.
+     * Called when the dragged bar backs off and the collision no longer holds —
+     * we have to un-push the chain we created, otherwise pushed children would
+     * remain shifted after the dragged bar moves away from them.
+     *
+     * @param {string} bar_id - the id whose downstream cascade we're undoing
+     * @param {Object} snap_by_id - id → snapshot map built in mousemove
+     * @param {Set} visited - the visited set from this drag pass
+     */
+    _revert_downstream(bar_id, snap_by_id, visited) {
+        const child_ids = this.dependency_map[bar_id] || [];
+        for (const child_id of child_ids) {
+            const snap = snap_by_id[child_id];
+            if (!snap || !snap.pushed) continue;
+            snap.pushed = false;
+            snap.bar.$bar.finaldx = 0;
+            snap.bar.update_bar_position({ x: snap.ox });
+            visited.delete(child_id);
+            this._revert_downstream(child_id, snap_by_id, visited);
+        }
+    }
+
+    /**
+     * Symmetric revert for backward cascade — undoes any parents we pushed
+     * leftward earlier in this drag pass once the dragged bar moves back to
+     * the right and no longer overlaps the parent.
+     */
+    _revert_upstream(bar_id, snap_by_id, visited) {
+        const task = this.get_task(bar_id);
+        if (!task) return;
+        const parent_ids = task.dependencies || [];
+        for (const parent_id of parent_ids) {
+            const snap = snap_by_id[parent_id];
+            if (!snap || !snap.pushed) continue;
+            snap.pushed = false;
+            snap.bar.$bar.finaldx = 0;
+            snap.bar.update_bar_position({ x: snap.ox });
+            visited.delete(parent_id);
+            this._revert_upstream(parent_id, snap_by_id, visited);
+        }
     }
     get_all_parent_tasks(task_id) {
         let out = [];
